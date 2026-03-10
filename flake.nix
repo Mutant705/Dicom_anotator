@@ -12,10 +12,18 @@
       config.allowUnfree = true;
     };
 
+    python = pkgs.python312.override {
+      packageOverrides = pyself: pysuper: {
+        cupy = pysuper.cupy.overridePythonAttrs (old: {
+          buildInputs = (old.buildInputs or []) ++ [ pyself.cython ];
+        });
+      };
+    };
+
   in {
     devShells.${system}.default = pkgs.mkShell {
       packages = [
-        (pkgs.python312.withPackages (ps: [
+        (python.withPackages (ps: [
           ps.numpy
           ps.matplotlib
           ps.pydicom
@@ -27,3 +35,4 @@
   };
 }
 #after saving changes do nix develop to save changes ;) 
+
