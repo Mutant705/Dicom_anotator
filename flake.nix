@@ -21,7 +21,7 @@
           cupy = pySuper.cupy.overridePythonAttrs (old: {
             # Move Cython to nativeBuildInputs so the PEP 517 builder sees it
             nativeBuildInputs = (old.nativeBuildInputs or [ ]) ++ [
-              pySelf.cython_3
+              pySelf.cython_3_1
               pySelf.setuptools
               pkgs.cudaPackages.cuda_nvcc
             ];
@@ -38,7 +38,7 @@
         ps.numpy
         ps.matplotlib
         ps.pydicom
-        ps.cython_3
+        ps.cython_3_1
         ps.cupy
       ]);
 
