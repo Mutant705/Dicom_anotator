@@ -12,16 +12,23 @@
       config.allowUnfree = true;
     };
 
+    python = pkgs.python313.override {
+      packageOverrides = self: super: {
+        cupy = super.cupy.overridePythonAttrs (old: {
+          buildInputs = (old.buildInputs or []) ++ [ self.cython ];
+        });
+      };
+    };
+
   in {
     devShells.${system}.default = pkgs.mkShell {
       packages = [
-        (pkgs.python313.withPackages (ps: [
+        (python.withPackages (ps: [
+          ps.numpy
           ps.matplotlib
           ps.pydicom
-          ps.numpy
           ps.cython
           ps.cupy
-         
         ]))
       ];
     };
