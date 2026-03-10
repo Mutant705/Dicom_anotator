@@ -20,6 +20,7 @@
           ps.pydicom
           ps.numpy
           ps.cupy
+          ps.cython
         ]))
       ];
     };
