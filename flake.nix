@@ -4,22 +4,25 @@
   };
 
   outputs = { self, nixpkgs }:
-    let
-      system = "x86_64-linux"; 
-      pkgs = import nixpkgs { inherit system; };
-    in
-    {
-      devShells.${system}.default = pkgs.mkShell {
-        packages = [
-          (pkgs.python313.withPackages (ps: [
-#add more python pacakges for python313 here 
+  let
+    system = "x86_64-linux";
+
+    pkgs = import nixpkgs {
+      inherit system;
+      config.allowUnfree = true;
+    };
+
+  in {
+    devShells.${system}.default = pkgs.mkShell {
+      packages = [
+        (pkgs.python313.withPackages (ps: [
           ps.matplotlib
           ps.pydicom
-          ps.numpy 
-          #ps.cupy #for MSI laptop 
-          ]))
-        ];
-      };
+          ps.numpy
+          ps.cupy
+        ]))
+      ];
     };
+  };
 }
 #after saving changes do nix develop to save changes ;) 
