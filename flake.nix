@@ -19,8 +19,9 @@
           ps.matplotlib
           ps.pydicom
           ps.numpy
-          ps.cupy
           ps.cython
+          ps.cupy
+         
         ]))
       ];
     };
