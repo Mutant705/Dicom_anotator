@@ -12,10 +12,10 @@
       config.allowUnfree = true;
     };
 
-    python = pkgs.python312.override {
-      packageOverrides = pyself: pysuper: {
-        cupy = pysuper.cupy.overridePythonAttrs (old: {
-          buildInputs = (old.buildInputs or []) ++ [ pyself.cython ];
+    python = pkgs.python313.override {
+      packageOverrides = self: super: {
+        cupy = super.cupy.overridePythonAttrs (old: {
+          buildInputs = (old.buildInputs or []) ++ [ self.cython ];
         });
       };
     };
