@@ -11,122 +11,111 @@ TASKS DONE:
 import numpy as np
 import cupy as cp
 import matplotlib.pyplot as plt
-from matplotlib.widgets import Button, Slider, TextBox
+from matplotlib.widgets import Button, Slider
 from matplotlib.colors import LinearSegmentedColormap
 
 # ==========================================================
-# BUFFER CLASS DEFINITIONS (Edit here to rename/add)
+# BUFFER CLASS DEFINITIONS (Edit names here)
 # ==========================================================
 CLASS_CONFIG = {
-    0: "Image",   # Reserved for Stencil
-    1: "Bone",    # Buffer 1
-    2: "Tissue",  # Buffer 2
-    # 3: "Tumor",
-    # 4: "Vessels",
-    # ... up to 15
+    1: "Bone",
+    2: "Tissue",
+    3: "Tumor",
+    4: "Vessels",
+    # You can add up to 15 classes here
 }
 
 class DICOMVisualizer:
-    def __init__(self, frame, window_start=0):
-        self.__frame = frame
-        # LAYER 0: Stencil Buffer (Image)
-        self.__img_buffer_gpu = cp.array(frame.pixel_data.astype(np.int32))
-        self.__h, self.__w = self.__img_buffer_gpu.shape
-        self.__window_val = window_start
+    def __init__(self, frame_obj: 'DICOMFrame'):
+        """
+        Annotation UI using GPU buffers for high-performance drawing.
+        :param frame_obj: The DICOMFrame object from Data_extractor
+        """
+        self.frame = frame_obj
         
-        # LAYERS 1-15: Annotation Buffers
-        self.__num_buffers = 16 
-        self.__mask_buffers = cp.zeros((self.__h, self.__w, self.__num_buffers), dtype=cp.uint8)
+        # Load raw data to GPU (Buffer 0 Placeholder)
+        self.__raw_gpu = cp.array(self.frame.pixel_data.astype(np.int32))
+        self.__h, self.__w = self.__raw_gpu.shape
         
-        # State
-        self.__active_idx = 1 # Default to Bone
-        self.__active_button = None
-        self.__last_coord = None
-        self.__temp_pts = []
-        self.__roi = [0, self.__h, 0, self.__w]
+        # Buffer initialization: 16 total slots (1 image stencil + 15 classes)
+        # Using uint8 to save VRAM on 3043x3043 arrays
+        self.__mask_buffers = cp.zeros((self.__h, self.__w, 16), dtype=cp.uint8)
         
-        # Brush Config
+        # UI State
+        self.__active_idx = 1
+        self.__window_val = int(cp.asnumpy(self.__raw_gpu.min()))
         self.__draw_r = 10
         self.__erase_r = 40
-        self.__bg_cache = None
+        self.__active_button = None
+        self.__temp_pts = []
         
         self.__setup_ui()
 
     def __setup_ui(self):
-        self.__fig = plt.figure(figsize=(15, 10))
-        self.__ax = self.__fig.add_axes([0.18, 0.12, 0.78, 0.82])
+        self.__fig = plt.figure(figsize=(14, 10))
+        self.__ax = self.__fig.add_axes([0.18, 0.12, 0.75, 0.82])
         
-        # Setup Widgets (Individually managed for zero lag)
-        self.__setup_widgets()
-        
-        # Vector Markers
+        # Window Slider (Updates Buffer 0 Display)
+        ax_win = self.__fig.add_axes([0.3, 0.05, 0.4, 0.02])
+        self.__swin = Slider(ax_win, 'Window', 
+                             int(cp.asnumpy(self.__raw_gpu.min())), 
+                             int(cp.asnumpy(self.__raw_gpu.max())), 
+                             valinit=self.__window_val)
+        self.__swin.on_changed(self.__update_window)
+
+        # Eraser Radius Slider
+        ax_rad = self.__fig.add_axes([0.3, 0.02, 0.4, 0.02])
+        self.__srad = Slider(ax_rad, 'Eraser R', 10, 300, valinit=self.__erase_r)
+        self.__srad.on_changed(self.__update_radius)
+
+        # Class Selection Buttons
+        self.__btns = {}
+        for idx, name in CLASS_CONFIG.items():
+            ax_b = self.__fig.add_axes([0.02, 0.9 - (idx*0.05), 0.12, 0.04])
+            btn = Button(ax_b, name)
+            btn.on_clicked(lambda e, i=idx: self.__switch_buffer(i))
+            self.__btns[idx] = btn
+
+        # Interactive Drawing Markers
         self.__line_marker, = self.__ax.plot([], [], color='#00FF00', lw=2, animated=True, zorder=10)
         self.__erase_marker = plt.Circle((0,0), self.__erase_r, color='red', fill=False, animated=True, zorder=11)
         self.__ax.add_patch(self.__erase_marker)
-        
-        # Warm up Cache
-        self.__render_stencil() 
-        self.__full_redraw()
 
-        # Connect Logic
+        self.__update_button_ui()
+        self.__render_stencil()
+        self.__refresh_view()
+
+        # Connect Matplotlib Events
         self.__fig.canvas.mpl_connect('button_press_event', self.__on_press)
         self.__fig.canvas.mpl_connect('motion_notify_event', self.__on_motion)
         self.__fig.canvas.mpl_connect('button_release_event', self.__on_release)
         self.__fig.canvas.mpl_connect('key_press_event', self.__on_key)
 
-    def __setup_widgets(self):
-        # Window Slider
-        ax_win = self.__fig.add_axes([0.3, 0.05, 0.4, 0.02])
-        self.__swin = Slider(ax_win, 'Window', 0, int(cp.asnumpy(self.__img_buffer_gpu.max()))-255, valinit=self.__window_val)
-        self.__swin.on_changed(self.__update_window)
-
-        # Radius Slider
-        ax_rad = self.__fig.add_axes([0.3, 0.02, 0.4, 0.02])
-        self.__srad = Slider(ax_rad, 'Eraser R', 10, 250, valinit=self.__erase_r)
-        self.__srad.on_changed(self.__update_radius)
-
-        # Class Buttons (Layers)
-        self.__btns = {}
-        for idx, name in CLASS_CONFIG.items():
-            if idx == 0: continue # Skip image stencil
-            ax_b = self.__fig.add_axes([0.02, 0.9 - (idx*0.05), 0.12, 0.04])
-            btn = Button(ax_b, name)
-            btn.on_clicked(lambda e, i=idx: self.__switch_buffer(i))
-            self.__btns[idx] = btn
-        
-        self.__update_button_colors()
-
     def __render_stencil(self):
-        """Processes Buffer 0 (Image) into a viewable stencil."""
-        y1, y2, x1, x2 = self.__roi
-        data = self.__img_buffer_gpu[y1:y2, x1:x2]
+        """Processes Buffer 0 for display view based on window value."""
+        data = self.__raw_gpu
         buf = cp.zeros(data.shape, dtype=cp.uint8)
         mask = (data >= self.__window_val) & (data <= self.__window_val + 255)
         buf[mask] = (data[mask] - self.__window_val).astype(cp.uint8)
         self.__stencil_cpu = cp.asnumpy(buf)
 
-    def __full_redraw(self):
-        """Refreshes the high-res view and the Blit Cache."""
-        y1, y2, x1, x2 = self.__roi
+    def __refresh_view(self):
+        """Full re-render of background for blitting."""
         self.__ax.clear()
         self.__ax.set_axis_off()
-        extent = [x1, x2, y2, y1]
-
-        # Layer 0 (Base)
-        self.__ax.imshow(self.__stencil_cpu, cmap='gray', extent=extent, zorder=1)
+        # Layer 0: Stencil
+        self.__ax.imshow(self.__stencil_cpu, cmap='gray', zorder=1)
         
-        # Active Buffer Overlay
-        active_data = cp.asnumpy(self.__mask_buffers[y1:y2, x1:x2, self.__active_idx])
+        # Active Layer: Mask
+        mask = cp.asnumpy(self.__mask_buffers[:, :, self.__active_idx])
         cm = LinearSegmentedColormap.from_list('c', [(0,0,0,0), '#00FF00'], N=2)
-        self.__ax.imshow(active_data, cmap=cm, extent=extent, zorder=2, alpha=0.4)
+        self.__ax.imshow(mask, cmap=cm, zorder=2, alpha=0.4)
         
-        # Reset Markers
-        self.__line_marker, = self.__ax.plot([], [], color='#00FF00', lw=2, animated=True, zorder=10)
-        self.__erase_marker = plt.Circle((0,0), self.__erase_r, color='red', fill=False, animated=True, zorder=11)
+        # Markers
+        self.__line_marker, = self.__ax.plot([], [], color='#00FF00', lw=2, animated=True)
+        self.__erase_marker = plt.Circle((0,0), self.__erase_r, color='red', fill=False, animated=True)
         self.__ax.add_patch(self.__erase_marker)
         
-        self.__ax.set_xlim(x1, x2)
-        self.__ax.set_ylim(y2, y1)
         self.__fig.canvas.draw()
         self.__bg_cache = self.__fig.canvas.copy_from_bbox(self.__ax.bbox)
 
@@ -139,30 +128,26 @@ class DICOMVisualizer:
     def __on_motion(self, event):
         if self.__active_button and event.inaxes == self.__ax:
             curr = (event.ydata, event.xdata)
-            
-            # Sub-pixel Interpolation for smooth lines
-            dy, dx = curr[0] - self.__last_coord[0], curr[1] - self.__last_coord[1]
-            dist = np.sqrt(dy**2 + dx**2)
-            if dist > 1:
-                for i in range(1, int(dist)+1):
-                    self.__temp_pts.append((self.__last_coord[0] + dy*(i/dist), 
-                                           self.__last_coord[1] + dx*(i/dist)))
+            # Sub-pixel interpolation
+            dist = np.hypot(curr[0]-self.__last_coord[0], curr[1]-self.__last_coord[1])
+            steps = max(int(dist), 1)
+            for i in range(1, steps + 1):
+                self.__temp_pts.append((self.__last_coord[0] + (curr[0]-self.__last_coord[0])*(i/steps),
+                                       self.__last_coord[1] + (curr[1]-self.__last_coord[1])*(i/steps)))
             self.__last_coord = curr
             
-            # Instant Blit Interaction
             self.__fig.canvas.restore_region(self.__bg_cache)
-            if self.__active_button == 1:
+            if self.__active_button == 1: # Draw
                 py, px = zip(*self.__temp_pts)
                 self.__line_marker.set_data(px, py)
                 self.__ax.draw_artist(self.__line_marker)
-            else:
+            elif self.__active_button == 3: # Erase
                 self.__erase_marker.center = (event.xdata, event.ydata)
                 self.__ax.draw_artist(self.__erase_marker)
             self.__fig.canvas.blit(self.__ax.bbox)
 
     def __on_release(self, event):
         if self.__active_button:
-            # Bake to Buffer in one GPU pass
             is_er = (self.__active_button == 3)
             r = self.__erase_r if is_er else self.__draw_r
             y_g, x_g = cp.ogrid[-r:r+1, -r:r+1]
@@ -172,7 +157,7 @@ class DICOMVisualizer:
                 self.__gpu_op(int(round(y)), int(round(x)), brush, r, is_er)
             
             self.__active_button = None
-            self.__full_redraw()
+            self.__refresh_view()
 
     def __gpu_op(self, y, x, brush, r, erase):
         y_s, y_e = max(0, y-r), min(self.__h, y+r+1)
@@ -183,28 +168,31 @@ class DICOMVisualizer:
 
     def __switch_buffer(self, idx):
         self.__active_idx = idx
-        self.__update_button_colors()
-        self.__full_redraw()
+        self.__update_button_ui()
+        self.__refresh_view()
 
-    def __update_button_colors(self):
+    def __update_button_ui(self):
         for idx, btn in self.__btns.items():
             btn.label.set_color('red' if idx == self.__active_idx else 'black')
-            btn.color = 'lightgray' if idx == self.__active_idx else '0.85'
 
     def __update_window(self, val):
         self.__window_val = int(val)
         self.__render_stencil()
-        self.__full_redraw()
+        self.__refresh_view()
 
     def __update_radius(self, val):
         self.__erase_r = int(val)
         self.__erase_marker.set_radius(self.__erase_r)
 
     def __on_key(self, event):
-        if event.key == 'q':
-            # Export Layers 1-15 as Binary Masks
-            masks = cp.asnumpy(self.__mask_buffers[:,:,1:] > 0).astype(np.uint8)
-            self.__frame.pixel_data = masks
+        if event.key == 'enter':
+            # Injection: Export GPU masks to the frame object
+            # Stores as a list of 15 numpy arrays
+            self.frame.masks = [cp.asnumpy(self.__mask_buffers[:,:,i] > 0) for i in range(1, 16)]
+            self.frame.class_mapping = CLASS_CONFIG
+            self.frame.is_annotated = True
+            plt.close(self.__fig)
+        elif event.key == 'q':
             plt.close(self.__fig)
 
     def show(self):

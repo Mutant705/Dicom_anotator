@@ -16,77 +16,71 @@ USAGE:
     # Access metadata summary
     print(processor.metadata)
 """
-
 import pydicom
 import numpy as np
-from dataclasses import dataclass
-from typing import List
+from dataclasses import dataclass, field
+from typing import List, Dict
+import os
 
 @dataclass
 class DICOMFrame:
-    """Public data structure for individual frame data and its specific metadata."""
+    """Enhanced data structure to hold raw data and resulting annotation masks."""
     frame_index: int
     pixel_data: np.ndarray
     view_details: str
     encoding: str
     compression: str
+    # New attributes for the Annotation Module
+    masks: List[np.ndarray] = field(default_factory=list) 
+    class_mapping: Dict[int, str] = field(default_factory=dict)
+    is_annotated: bool = False
+
+    def save_npz(self, output_dir="dataset"):
+        """Saves this specific frame and its masks for AI training."""
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+            
+        filename = os.path.join(output_dir, f"frame_{self.frame_index}.npz")
+        
+        # Build payload: Raw Image + any masks that aren't empty
+        save_dict = {"raw_image": self.pixel_data}
+        for i, mask in enumerate(self.masks):
+            if np.any(mask):
+                save_dict[f"mask_{i+1}"] = mask.astype(np.uint8)
+        
+        # Metadata
+        save_dict["classes"] = np.array(list(self.class_mapping.values()))
+        
+        np.savez_compressed(filename, **save_dict)
+        print(f"[DISK] Saved {filename}")
 
 class DICOMProcessor:
     def __init__(self, file_path: str):
-        """
-        Public constructor. 
-        Loads the DICOM file and immediately runs the private extraction logic.
-        """
-        # Private raw dataset
         self.__ds = pydicom.dcmread(file_path)
-        
-        # Publicly accessible results
         self.frames: List[DICOMFrame] = []
         self.metadata = self.__extract_summary()
-        
-        # Trigger internal processing
         self.__extract_frames()
 
     def __extract_frames(self):
-        """Private method: Parses pixel arrays and frame-specific metadata."""
-        # Universal metadata for all frames in this file
-        transfer_syntax = self.__ds.file_meta.TransferSyntaxUID
-        encoding_name = transfer_syntax.name
-        compression_status = "Compressed" if transfer_syntax.is_compressed else "Uncompressed"
-        
-        # Extract View Details (SeriesDescription or BodyPartExamined)
+        ts = self.__ds.file_meta.TransferSyntaxUID
+        encoding_name = ts.name
+        compression_status = "Compressed" if ts.is_compressed else "Uncompressed"
         view_details = getattr(self.__ds, 'SeriesDescription', 'Unknown View')
         
-        # Handle Pixel Data
-        pixel_array = self.__ds.pixel_array
-        
-        # Determine frame count (default to 1 if tag is missing)
+        # Force raw pixel values to int32 for future-proof windowing
+        pixel_array = self.__ds.pixel_array.astype(np.int32)
         num_frames = int(getattr(self.__ds, 'NumberOfFrames', 1))
 
         if num_frames > 1 and pixel_array.ndim > 2:
             for i in range(num_frames):
-                self.frames.append(DICOMFrame(
-                    frame_index=i,
-                    pixel_data=pixel_array[i],
-                    view_details=view_details,
-                    encoding=encoding_name,
-                    compression=compression_status
-                ))
+                self.frames.append(DICOMFrame(i, pixel_array[i], view_details, encoding_name, compression_status))
         else:
-            # Single frame case
-            self.frames.append(DICOMFrame(
-                frame_index=0,
-                pixel_data=pixel_array,
-                view_details=view_details,
-                encoding=encoding_name,
-                compression=compression_status
-            ))
+            self.frames.append(DICOMFrame(0, pixel_array, view_details, encoding_name, compression_status))
 
     def __extract_summary(self) -> dict:
-        """Private method: Safely extracts high-level metadata."""
         return {
             "PatientName": str(getattr(self.__ds, 'PatientName', 'N/A')),
             "Modality": getattr(self.__ds, 'Modality', 'N/A'),
-            "StudyDate": getattr(self.__ds, 'StudyDate', 'N/A'),
-            "SOPClassUID": self.__ds.SOPClassUID
+            "SOPInstanceUID": getattr(self.__ds, 'SOPInstanceUID', 'N/A')
         }
+

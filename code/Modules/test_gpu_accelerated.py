@@ -1,40 +1,44 @@
+import numpy as np
+import os
+
+# Import specific classes to avoid the 'module object is not callable' error
 from Data_extractor import DICOMProcessor
-# Changed import to point to your new GPU-accelerated file
 from Display_and_Anotator_gpu_accelrated import DICOMVisualizer
 
-# Initialize the class
-# Update path if necessary
+# 1. Initialize the Processor
 dicom_path = "../Test_data/1.2.392.200036.9125.4.0.1.2.840.114257.1.1.10668.43713.2685653.1.dcm"
-processor = DICOMProcessor(dicom_path)
 
-# Access the list of processed frames
-for frame in processor.frames:
-    print(f"Frame {frame.frame_index}: {frame.pixel_data.shape}")
-    print(f"Encoding: {frame.encoding} | Compression: {frame.compression}")
+if not os.path.exists(dicom_path):
+    print(f"Error: Could not find file at {dicom_path}")
+else:
+    processor = DICOMProcessor(dicom_path)
 
-# Access metadata summary
-print(processor.metadata)
+    print("--- DICOM EXTRACTION SUMMARY ---")
+    print(processor.metadata)
+    
+    # 2. Select the first frame
+    frame_to_annotate = processor.frames[0]
 
-# Select the first frame
-frame_data = processor.frames[0]
+    # 3. Initialize Visualizer 
+    view = DICOMVisualizer(frame_to_annotate)
 
-# Initialize Visualizer 
-# window_start defaults to 0 as requested, or pass "Normalize"
-view = DICOMVisualizer(frame_data, window_start=0)
+    print("\n--- OPENING GPU ACCELERATED UI ---")
+    view.show()
 
-# Start the interactive UI
-view.show()
+    # 4. Post-Annotation Logic
+    if getattr(frame_to_annotate, 'is_annotated', False):
+        print("\n--- SAVING DATA ---")
+        save_folder = "training_output"
+        frame_to_annotate.save_npz(output_dir=save_folder)
+        
+        # Verification
+        saved_file = os.path.join(save_folder, f"frame_{frame_to_annotate.frame_index}.npz")
+        loaded_data = np.load(saved_file)
+        print(f"Verified: {saved_file} contains {loaded_data.files}")
+    else:
+        print("\nSession ended without saving.")
 
-# After you press 'q', the mask is pulled from GPU VRAM back to CPU RAM 
-# and stored in frame_data.pixel_data
-print("Annotation session finished.")
-print(f"Resulting Mask Shape: {frame_data.pixel_data.shape}")
-# Access the list of processed frames
-for frame in processor.frames:
-    print(f"Frame {frame.frame_index}: {frame.pixel_data.shape}")
-    print(f"Encoding: {frame.encoding} | Compression: {frame.compression}")
 
-# Access metadata summary
-print(processor.metadata)
 
-#
+
+
