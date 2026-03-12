@@ -40,6 +40,7 @@
         ps.pydicom
         ps.cython_3_1
         ps.cupy
+        ps.tkinter
       ]);
 
     in {

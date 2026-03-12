@@ -7,7 +7,7 @@ import numpy as np
 sys.path.append(os.path.join(os.path.dirname(__file__), 'Modules'))
 
 from Data_extractor import DICOMProcessor
-from Display_and_Anotator_gpu_accelrated import DICOMVisualizer
+from t2 import DICOMVisualizer
 
 def main():
     data_dir = os.path.join(os.path.dirname(__file__), 'Data')
