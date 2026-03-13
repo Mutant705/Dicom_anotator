@@ -1,7 +1,4 @@
-Disclamer : AI was used in making this Project
-This **README.md** is designed to act as a technical guide for your specific GPU-accelerated medical imaging pipeline. It covers the directory structure, configuration, and the downstream usage of the granulated data.
-
----
+# Disclamer : AI was used in making this Project
 
 # 🛠️ DICOM GPU Annotator & Segmenter
 
