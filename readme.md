@@ -1,4 +1,5 @@
 # Disclamer : AI was used in making this Project
+I made this to streamline my workflow and sorry for messy flake this is my firstime using direnv 
 
 # 🛠️ DICOM GPU Annotator & Segmenter
 
