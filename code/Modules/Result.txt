@@ -1,3 +1,0 @@
-Frame 0: (3043, 3043)
-Encoding: Explicit VR Little Endian | Compression: Uncompressed
-{'PatientName': 'NILIMA BEGUM', 'Modality': 'DX', 'StudyDate': '20250305', 'SOPClassUID': '1.2.840.10008.5.1.4.1.1.1.1'}

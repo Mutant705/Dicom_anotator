@@ -41,6 +41,7 @@
         ps.cython_3_1
         ps.cupy
         ps.tkinter
+        ps.opencv4Full
       ]);
 
     in {
