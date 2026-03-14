@@ -1,7 +1,7 @@
 # Disclamer : AI was used in making this Project
 I made this to streamline my workflow and sorry for messy flake this is my firstime using direnv 
 
-# 🛠️ DICOM GPU Annotator & Segmenter
+# 🛠️ DICOM GPU Annotator
 
 A high-performance Python toolset for annotating 16/32-bit DICOM files using GPU-accelerated buffers. This application preserves the full dynamic range of your medical data while allowing for multi-class semantic segmentation.
 
