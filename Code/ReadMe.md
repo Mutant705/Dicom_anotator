@@ -48,7 +48,7 @@ CLASS_MAPPING = {
 
 
 3. **Update `Modules/Interface.py**`: Inside the `setup_ui` method, add the matching radio button to the sidebar so it appears in the GUI.
-
+Line 63:) 
 ---
 
 ## 🔍 Pixel Distribution Analyser

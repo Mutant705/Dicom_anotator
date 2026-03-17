@@ -15,7 +15,8 @@ def main():
         2: "L_Pleural",
         3: "R_Pleural",
         4: "Mediastinum",
-        5: "Gastric"
+        5: "Abdominal",
+        6: "test"
     }
     
     for f_path in dcm_files:

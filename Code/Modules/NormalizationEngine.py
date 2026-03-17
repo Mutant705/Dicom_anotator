@@ -13,7 +13,7 @@ class NormalizationEngine:
             res = cp.clip(data, v1, v2)
             res = (res - v1) / (v2 - v1 + 1e-7)
             
-        elif mode == "Skewed":
+        elif mode == "Sigmoid":
             res = 1.0 / (1.0 + cp.exp(-(data - v1) / (v2 + 1e-7)))
             
         elif mode == "Z-Score":

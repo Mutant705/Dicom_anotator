@@ -5,7 +5,8 @@ import cv2
 class AnnotatorEngine:
     def __init__(self, frame_data):
         self.h, self.w = frame_data.shape
-        self.raw_gpu = cp.array(frame_data.astype(cp.int32))
+        # FIX 1: Changed int16 to uint16 (Unsigned 16-bit) to prevent integer wrapping
+        self.raw_gpu = cp.array(frame_data.astype(cp.uint16))
         self.mask_buffers = cp.zeros((self.h, self.w, 16), dtype=cp.uint8)
         self.view_stencil_cpu = None 
 
@@ -39,6 +40,7 @@ class AnnotatorEngine:
     def fill_closed_curve(self, coords, idx):
         if len(coords) < 3: return
         temp_mask = np.zeros((self.h, self.w), dtype=np.uint8)
+        # FIX 2: Changed back to int32 because OpenCV requires 32-bit coords for polygons
         pts = np.array(coords, dtype=np.int32)
         cv2.fillPoly(temp_mask, [pts], 1)
         self.mask_buffers[:, :, idx] |= cp.array(temp_mask)

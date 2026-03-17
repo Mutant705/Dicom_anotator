@@ -60,7 +60,7 @@ class AnnotatorUI:
         tk.Button(sidebar, text="APPLY VIEW", bg="#444", fg="white", command=self.apply_normalization).pack(pady=10, fill=tk.X, padx=20)
 
         tk.Label(sidebar, text="CLASSES", fg="#00ffcc", bg="#252525", font=("Arial", 10, "bold")).pack(pady=10)
-        classes = {1: "Bones", 2: "L_Pleural", 3: "R_Pleural", 4: "Mediastinum", 5: "Gastric"}
+        classes = {1: "Bones", 2: "L_Pleural", 3: "R_Pleural", 4: "Mediastinum", 5: "Abdominal"}
         for val, name in classes.items():
             tk.Radiobutton(sidebar, text=name, variable=self.class_var, value=val, bg="#252525", fg="#aaa", selectcolor="black", command=self.refresh_plot).pack(anchor=tk.W, padx=30)
 
