@@ -1,11 +1,11 @@
 import tkinter as tk
 from tkinter import ttk
-import sys
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.patches import Circle
+import cupy as cp
 
 from .NormalizationEngine import NormalizationEngine
 from .AnnotatorEngine import AnnotatorEngine
@@ -35,7 +35,6 @@ class AnnotatorUI:
         self.setup_ui()
         self.load_frame_engine()
         
-        # Fix for the "Busy Terminal":
         self.root.protocol("WM_DELETE_WINDOW", self.cleanup_and_exit)
 
     def setup_ui(self):
@@ -48,7 +47,7 @@ class AnnotatorUI:
         sidebar.pack(side=tk.LEFT, fill=tk.Y)
 
         tk.Label(sidebar, text="NORMALIZATION", fg="#00ffcc", bg="#252525", font=("Arial", 10, "bold")).pack(pady=10)
-        ttk.Combobox(sidebar, textvariable=self.norm_mode, values=["Linear", "Skewed", "Z-Score", "Log"]).pack(pady=5)
+        ttk.Combobox(sidebar, textvariable=self.norm_mode, values=["Linear", "Sigmoid", "Z-Score", "Log"]).pack(pady=5)
         
         f = tk.Frame(sidebar, bg="#252525")
         f.pack(pady=5)
@@ -87,9 +86,19 @@ class AnnotatorUI:
         self.canvas.mpl_connect("button_release_event", self.on_release)
 
     def load_frame_engine(self):
-        print(f"[*] Displaying Frame {self.curr_idx + 1}")
+        # Clear old GPU memory before loading a new frame to prevent memory leaks
+        if hasattr(self, 'engine'):
+            del self.engine
+            cp.get_default_memory_pool().free_all_blocks()
+
+        print(f"[*] Displaying Frame {self.curr_idx + 1}/{len(self.proc.frames)}")
         frame = self.proc.frames[self.curr_idx]
         self.engine = AnnotatorEngine(frame.pixel_data)
+        
+        for m_idx, existing_mask in frame.masks.items():
+            if np.any(existing_mask):
+                self.engine.mask_buffers[:, :, m_idx] = cp.array(existing_mask)
+                
         self.apply_normalization()
 
     def apply_normalization(self):
@@ -165,19 +174,32 @@ class AnnotatorUI:
         self.engine.apply_brush(int(event.ydata), int(event.xdata), r, self.class_var.get(), (self.last_button==3))
 
     def on_save_and_exit(self):
+        # 1. Sync the current drawing to the buffer
         self.sync_mask()
+        
+        # 2. Trigger the save & move logic in main.py
         self.save_callback()
+        
+        # 3. Explicitly call cleanup (since we no longer rely on the window manager)
         self.cleanup_and_exit()
 
     def cleanup_and_exit(self):
-        print("[*] Cleaning up GPU resources and exiting...")
+        print("[*] Closing UI window and clearing resources...")
+        
+        # Final GPU cleanup to prevent memory leaks between files
+        if hasattr(self, 'engine'):
+            del self.engine
+        cp.get_default_memory_pool().free_all_blocks()
+        
+        # Safely close Matplotlib figures to release the background thread
         plt.close('all')
+        
+        # Explicitly stop the mainloop BEFORE destroying the window
         self.root.quit()
         self.root.destroy()
-        sys.exit(0)
 
     def sync_mask(self):
-        for i in range(1, 6):
+        for i in range(1, 16):
             self.proc.frames[self.curr_idx].masks[i] = self.engine.get_mask_cpu(i)
 
     def next_f(self):
@@ -189,4 +211,3 @@ class AnnotatorUI:
         self.sync_mask()
         if self.curr_idx > 0:
             self.curr_idx -= 1; self.load_frame_engine()
-

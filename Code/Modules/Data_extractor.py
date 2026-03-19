@@ -81,5 +81,5 @@ class DICOMProcessor:
             for i in range(num_frames):
                 self.frames.append(DICOMFrame(i, pixel_array[i], view))
         else:
-            self.frames.append(DICOMFrame(0, pixel_array, view))
+            # FIX: Removed the duplicate append line that was overwriting the .npz output
             self.frames.append(DICOMFrame(0, pixel_array, view))
